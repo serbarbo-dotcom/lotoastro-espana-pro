@@ -1,0 +1,49 @@
+name: Actualizar estadísticas y publicar LotoAstro
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+  schedule:
+    - cron: '17 3 * * *'
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+concurrency:
+  group: github-pages
+  cancel-in-progress: false
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+      - name: Comprobar cálculos y generador
+        run: node test.mjs
+      - name: Descargar y validar estadísticas oficiales
+        id: statistics
+        continue-on-error: true
+        run: python update_stats.py
+      - name: Conservar estadísticas fechadas si la fuente falla
+        if: steps.statistics.outcome == 'failure'
+        run: echo 'No se pudo actualizar SELAE; se publica la copia fechada del repositorio.'
+      - name: Preparar sitio estático
+        run: |
+          mkdir -p _site
+          cp index.html _site/
+          cp stats.json _site/
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v4
+        with:
+          path: _site
+      - name: Publicar en GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
